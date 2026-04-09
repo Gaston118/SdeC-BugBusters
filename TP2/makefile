@@ -15,6 +15,7 @@ PYTHON        = $(VENV)/bin/python3
 PIP           = $(VENV)/bin/pip
 
 all: $(TARGET)
+	@echo "[INFO] $(TARGET) está actualizado. Usá << make clean && make >> para forzar recompilación."
 
 # Crea el venv e instala dependencias
 $(VENV)/bin/activate:
