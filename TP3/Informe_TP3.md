@@ -73,8 +73,35 @@ Si se modifica el atributo del segmento de datos a Solo Lectura y se intenta esc
 
 En este modo los registros (CS, DS, etc) se cargan con un Selector. Esto es así porque ya no contienen una dirección base directamente como en modo real (donde se multiplicaba por 16). En modo protegido, el selector actúa como un índice para buscar en la tabla de descriptores (GDT) los parámetros reales de base, límite y atributos del segmento.
 
-## Apartado práctico: Modo protegido
-1. Creación de imagen booteable
+---
+
+## Apartado práctico
+
+### Instalar las herramientas
+
+- **QEMU** → para virtualizar y correr las imágenes
+- **GAS (GNU Assembler)** → para ensamblar el código (`as`)
+- **GDB** → para depurar
+- **binutils** → incluye `ld`, `objdump`, `hd`
+
+### Comando de instalación
+
+```bash
+sudo apt update
+sudo apt install -y qemu-system-x86 binutils gdb build-essential
+```
+
+### Verificar que quedó todo bien instalado
+
+```bash
+qemu-system-x86_64 --version
+as --version
+ld --version
+gdb --version
+objdump --version
+```
+
+### 1. Creación de imagen booteable
 Se ejecutó el comando 'printf '\364%509s\125\252' > main.img'. Desglose del comando:
 * \364: Es el valor octal del opcode 0xF4, que corresponde a la instrucción de ensamblador HLT (Halt). Esto hace que el procesador se detenga apenas arranque.
 * %509s: Le dice al comando que inserte 509 espacios en blanco. Esto es necesario para rellenar el archivo hasta el byte 510.
@@ -91,6 +118,138 @@ Para comprobar quer funciona, ejecutamos la imagen con el emulador QEMU mediante
 
 <img width="696" height="471" alt="image" src="https://github.com/user-attachments/assets/f54f72cc-ae47-4d5d-9d97-7bf026d461a5" />
 
+### 2. Hello World Booteable
 
+En este paso creamos una imagen de disco booteable mínima que imprime "Hello World" en pantalla. El programa corre directamente sobre el hardware (sin sistema operativo), en **modo real de 16 bits**, utilizando interrupciones de la BIOS para mostrar caracteres en pantalla.
 
+### Archivo `link.ld`
+
+El script del linker le indica al programa **en qué dirección de memoria debe cargarse** y agrega la firma MBR al final.
+
+```ld
+SECTIONS
+{
+    . = 0x7c00;
+
+    .text :
+    {
+        __start = .;
+        *(.text)
+
+        . = 0x1FE;
+        SHORT(0xAA55)
+    }
+}
+```
+
+**¿Por qué `0x7c00`?**
+La BIOS, al detectar un sector booteable, lo carga **siempre** en la dirección física `0x7c00` de la memoria RAM. Si el linker no sabe esto, las referencias a etiquetas (como `msg`) tendrán direcciones incorrectas y el programa fallará.
+
+**¿Por qué `0xAA55` en `0x1FE`?**
+La BIOS verifica que los últimos 2 bytes del sector (bytes 510 y 511) sean `0x55` y `0xAA`. Si no están presentes, la BIOS no reconoce el sector como booteable. El valor `SHORT(0xAA55)` se almacena en little-endian, quedando `0x55` en el byte 510 y `0xAA` en el 511.
+
+### Estructura del MBR
+
+Un sector MBR tiene exactamente **512 bytes** con la siguiente estructura:
+
+| Dirección (hex) | Tamaño (bytes) | Descripción          |
+|-----------------|----------------|----------------------|
+| 0x000           | 446            | Código del bootloader |
+| 0x1BE           | 64             | Tabla de particiones  |
+| 0x1FE           | 2              | Firma: `0x55 0xAA`   |
+| **Total**       | **512**        |                      |
+
+### Compilación, generación de la imagen y ejecución en QEMU
+
+```bash
+# 1. Ensamblar: genera el archivo objeto
+as -g -o main.o main.S
+
+# 2. Linkear: genera la imagen binaria final
+ld --oformat binary -o main.img -T link.ld main.o
+```
+
+**¿Qué hace `--oformat binary`?**
+Le indica al linker que genere un archivo binario puro (raw), sin ningún encabezado de formato ELF ni similar. Esto es necesario porque la BIOS espera código máquina directo, no un ejecutable de Linux.
+
+Verificar que la imagen pesa exactamente 512 bytes:
+
+```bash
+ls -la main.img
+```
+
+Ejecucion en Qemu
+
+```bash
+qemu-system-x86_64 -hda main.img
+```
+
+<img width="1333" height="265" alt="image" src="https://github.com/user-attachments/assets/e6721f9a-3430-4e3f-9c63-bafae64da2f6" />
+
+<img width="733" height="473" alt="image" src="https://github.com/user-attachments/assets/9441b049-76d9-40f3-b670-8952ed652f69" />
+
+### Verificación con `hd` (hexdump)
+
+Se puede inspeccionar la imagen para verificar que el programa quedó correctamente ubicado y que la firma MBR está en su lugar:
+
+```bash
+hd main.img
+```
+
+<img width="822" height="724" alt="image" src="https://github.com/user-attachments/assets/fe2c0d92-326d-4fd5-9f25-f4e231df3dac" />
+
+### 3. Depuración con GDB
+
+En este paso conectamos GDB a QEMU para depurar el bootloader instrucción por instrucción. QEMU expone un servidor GDB integrado que permite pausar, inspeccionar registros y avanzar de a una instrucción a la vez.
+
+### Terminal 1: Lanzar QEMU en modo debug
+
+```bash
+qemu-system-i386 -fda main.img -boot a -s -S -monitor stdio
+```
+
+| Opción | Descripción |
+|--------|-------------|
+| `-s` | Abre servidor GDB en el puerto 1234 |
+| `-S` | Arranca pausado, esperando GDB |
+| `-monitor stdio` | Permite controlar QEMU desde la terminal |
+
+<img width="1287" height="661" alt="image" src="https://github.com/user-attachments/assets/896bc7a1-afc4-4733-b16a-c3198872539f" />
+
+### Terminal 2: Conectar GDB y configurar
+
+```gdb
+target remote localhost:1234   # Conectarse a QEMU
+set architecture i8086         # Modo 16 bits
+br *0x7c00                     # Breakpoint al inicio del bootloader
+c                              # Continuar hasta el breakpoint
+```
+
+Al conectarse, GDB muestra `0x0000fff0` — esa es la dirección donde arranca la BIOS, todo normal.
+
+<img width="802" height="701" alt="image" src="https://github.com/user-attachments/assets/916d8a6d-eb10-4b27-82ee-5aaeab590236" />
+
+### Depuración paso a paso
+
+```gdb
+x/i $pc       # Ver instrucción actual
+si            # Ejecutar una instrucción
+info registers # Ver estado de los registros
+```
+
+<img width="1906" height="940" alt="image" src="https://github.com/user-attachments/assets/2f4408c9-057a-4ba2-a2a7-63d3d6e77544" />
+
+```gdb
+br *0x7c0c    # Breakpoint después del int $0x10
+c             # Saltar la interrupción entera
+```
+
+<img width="1551" height="784" alt="image" src="https://github.com/user-attachments/assets/37491f1d-c879-4d13-9882-f62f80fce40c" />
+
+```gdb
+delete breakpoints
+c
+```
+
+<img width="1438" height="668" alt="image" src="https://github.com/user-attachments/assets/6844d6af-3d88-47cc-9ce6-d6aa06033560" />
 
