@@ -1,0 +1,3 @@
+[submodule "TP3/x86-bare-metal-examples"]
+	path = TP3/x86-bare-metal-examples
+	url = https://github.com/cirosantilli/x86-bare-metal-examples
