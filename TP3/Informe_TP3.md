@@ -74,3 +74,23 @@ Si se modifica el atributo del segmento de datos a Solo Lectura y se intenta esc
 En este modo los registros (CS, DS, etc) se cargan con un Selector. Esto es así porque ya no contienen una dirección base directamente como en modo real (donde se multiplicaba por 16). En modo protegido, el selector actúa como un índice para buscar en la tabla de descriptores (GDT) los parámetros reales de base, límite y atributos del segmento.
 
 ## Apartado práctico: Modo protegido
+1. Creación de imagen booteable
+Se ejecutó el comando 'printf '\364%509s\125\252' > main.img'. Desglose del comando:
+* \364: Es el valor octal del opcode 0xF4, que corresponde a la instrucción de ensamblador HLT (Halt). Esto hace que el procesador se detenga apenas arranque.
+* %509s: Le dice al comando que inserte 509 espacios en blanco. Esto es necesario para rellenar el archivo hasta el byte 510.
+* \125\252: Son los valores octales de 0x55 y 0xAA. Juntos forman la firma de arranque obligatoria en los últimos dos bytes (511 y 512) del sector. Si estos bytes no están presentes, la BIOS no considerará el disco como arrancable.
+
+<img width="678" height="468" alt="image" src="https://github.com/user-attachments/assets/7b476fbe-fd1b-4508-b074-55b60af73d98" />
+
+Para comprobar si los bytes creados en el comando están en el orden correcto se utiliza el comando ´hd main.img´.
+
+<img width="678" height="468" alt="image" src="https://github.com/user-attachments/assets/21709c1e-4b45-4c73-81c6-a93cced8a42d" />
+
+Para comprobar quer funciona, ejecutamos la imagen con el emulador QEMU mediante el comando 'qemu-system-x86_64 --drive file=main.img,format=raw,index=0,media=disk'.
+<img width="685" height="465" alt="image" src="https://github.com/user-attachments/assets/949b0900-9e72-4f45-8683-24c11384bc51" />
+
+<img width="696" height="471" alt="image" src="https://github.com/user-attachments/assets/f54f72cc-ae47-4d5d-9d97-7bf026d461a5" />
+
+
+
+
