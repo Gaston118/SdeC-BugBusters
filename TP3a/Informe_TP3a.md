@@ -215,3 +215,58 @@ Un bootkit que logre modificar código en esas regiones (por ejemplo, hookeando 
 
 ## PARTE 2 Desarrollo, compilación y análisis de seguridad
 
+<img width="1561" height="863" alt="image" src="https://github.com/user-attachments/assets/f1a9884c-853b-4513-ad99-31720608781c" />
+
+| Sección | Qué contiene |
+|---------|-------------|
+| `.text` | El código máquina de tu `efi_main` y las funciones de gnuefi |
+| `.reloc` | Las **relocation fix-ups** — le dicen al loader cómo ajustar direcciones cuando carga el binario en memoria arbitraria |
+| `.data` | Variables globales y strings (como `L"Iniciando analisis..."`) |
+| `.dynamic` | Info para el linker dinámico de UEFI |
+| `.rela` | Tabla de relocaciones con addends |
+| `.dynsym` | Tabla de símbolos dinámicos |
+
+### Pregunta de Razonamiento 4
+
+**¿Por qué usamos `SystemTable->ConOut->OutputString` en lugar de `printf`?**
+
+Porque en el entorno pre-OS **no existe la libc**. `printf` depende de:
+- El sistema operativo para escribir en stdout
+- La libc (`glibc`) para formatear strings
+
+En UEFI no hay ninguno de los dos. En cambio, `ConOut` es el protocolo `SimpleTextOutput` que UEFI expone a través de la System Table — es la única forma estándar de escribir en pantalla antes de que exista un OS. Por eso compilamos con `-ffreestanding` (sin libc).
+
+### Ghidra
+
+<img width="789" height="762" alt="image" src="https://github.com/user-attachments/assets/d2d6ccc2-4dd2-42bf-8889-4f0e13d459eb" />
+
+<img width="1636" height="933" alt="image" src="https://github.com/user-attachments/assets/42caeed6-c985-468a-9602-5fb19a91f5b7" />
+
+<img width="1629" height="820" alt="image" src="https://github.com/user-attachments/assets/79aacd2c-afb1-445b-ab18-9a7873b629e5" />
+
+<img width="1634" height="933" alt="image" src="https://github.com/user-attachments/assets/de8238bb-a7cd-4f26-868e-81ee8d5a682e" />
+
+### Pregunta de Razonamiento 5
+
+**¿Por qué `0xCC` suele aparecer como `-52` en Ghidra?**
+
+Porque Ghidra interpreta el byte `0xCC` como un entero con **signo** (signed char). En binario:
+
+```
+0xCC = 1100 1100
+```
+
+En complemento a dos de 8 bits, cuando el bit más significativo es `1`, el número es negativo:
+
+```
+0xCC como unsigned = 204
+0xCC como signed   = 204 - 256 = -52
+```
+
+**Por qué importa en ciberseguridad:** `0xCC` es el opcode de la instrucción **INT3** — el software breakpoint del x86. Los debuggers lo usan para pausar la ejecución. Si un analista ve `-52` en pseudocódigo y no reconoce que es `0xCC`, puede pasar por alto que el binario tiene lógica de detección de debugging o anti-análisis. Es una técnica usada en malware para detectar si está siendo analizado.
+
+> Aunque en el análisis con Ghidra, la condición `if (code[0] == 0xCC)` no aparece explícitamente en el pseudocódigo porque el compilador (gcc) la optimizó: como `code[]` se inicializa con `{ 0xCC }` y se compara inmediatamente con `0xCC`, la condición es **siempre verdadera** en tiempo de compilación, por lo que gcc eliminó el branch y dejó solo el cuerpo del `if`.
+
+---
+
+## PARTE 3 Ejecución en Hardware Físico (BareMetal)
