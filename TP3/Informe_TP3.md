@@ -253,3 +253,55 @@ c
 
 <img width="1438" height="668" alt="image" src="https://github.com/user-attachments/assets/6844d6af-3d88-47cc-9ce6-d6aa06033560" />
 
+### Modo Protegido
+
+En este inciso se deberá realizar un código en ASM que permita pasar a modo protegido sin usar las macros provistas en los ejemplos. Cada bloque del código reemplaza lo que hace cada una de las macros que se usan en `x86-bare-metal-examples/protected_mode.S`, de tal manera que el código final resulta mas visual.
+Para correr el código se ejecuta el archivo `modo_protegido/run.sh`, con la instrucción ./run.sh. Este archivo se encarga de compilar el código, generar el binario y correr QEMU para poder visualizar el mensaje. También agiliza la configuración de GDB, dado que se ocupa de agregar los breakpoints donde se desean.
+
+
+<img width="400" height="96" alt="Captura desde 2026-04-26 10-23-01" src="https://github.com/user-attachments/assets/8c3b5482-a69e-48e3-a9d4-ea7af76478ef" />
+
+
+Una vez dentro de GDB, se acepta la carga de etiquetas y se obtiene lo siguiente.
+
+
+<img width="498" height="151" alt="Captura desde 2026-04-26 10-23-46" src="https://github.com/user-attachments/assets/83b836ec-b57e-49b2-bb8c-99cf54e91ebf" />
+
+
+Como se puede ver, el breakpoint del modo protegido nos deja justo antes del loop. Al continuar al siguiente breakpoint, se pasa por delante de la etapa de impresión del mensaje y se visualizará el mensaje en la ventana de QEMU.
+
+
+<img width="719" height="461" alt="Captura desde 2026-04-26 10-24-09" src="https://github.com/user-attachments/assets/ca5f34da-e5df-4785-9c29-8b1470a7362e" />
+
+
+### Múltiples descriptores
+
+En caso de que se utilicen dos descriptores de memoria diferentes en código y datos, se puede obtener un nivel extra de protección basada en el contexto. La diferenciación del esquema unitario hace que:
+ * El segmento de código pueda ser ejecutable pero no escribible.
+ * El segmento de datos pueda ser escribible pero no ejecutable.
+ Esto nos permite proteger la memoria generando un aislamiento entre procesos, para evitar así escrituras indeseadas.
+
+ ### Cambio a WO
+
+ Se desea cambiar los bits de acceso del segmento de datos para que el programa sea de solo lectura, con el fin de analizar lo que sucede si se intenta escribir dentro de la memoria una vez ejecutado el programa.
+
+ Para lograr el objetivo, se deben cambiar los bits de permisos de escritura y correr el código de la misma manera que se realizó anteriormente.
+
+ <img width="488" height="267" alt="Captura desde 2026-04-26 10-28-30" src="https://github.com/user-attachments/assets/4e07299d-29c5-4686-9f22-7e8fa9e483e7" />
+
+Al ejecutar `modo_protegido/run.sh` con la configuración de solo lectura, se puede visualizar con GDB que el código se queda en un bucle dentro del primer breakpoint. Esto se debe a que el programa intenta escribir en un espacio de memoria donde no tiene permisos suficientes.
+
+ ### Registros de segmento
+
+ Los registros de segmento para modo protegido se cargan utilizando selectores de segmento en vez de valores directos. Esto introduce una capa extra de abstracción y control en la parte de gestión de memoria del programa. Nos permite tener mayor flexibilidad, seguridad y compatibilidad.
+
+  #### Tabla de descriptores de segmento
+
+  La tabla de descriptores de segmentos (GDT o LDT) es el mecanismo que utiliza la CPU estando en modo protegido para definir la organización de la memoria y que se puede hacer con cada parte de la misma. Esta tabla se encargará de almacenar los descriptores de cada segmento de memoria;
+  
+  * Base : Lugar de memoria donde empieza el segmento
+  * Límite : Tamaño del segmento
+  * Permisos : Que está permitido dentro del segmento
+  * Tipo : Clasificación del segmento
+  
+  Entonces, la CPU se encarga de leer el descriptor de memoria correspondiente y accede a la memoria. Esto permite dividir la memoria en partes sobre las cuales podemos definir las reglas que se deseen, con el fin de introducir mayor protección, organización y aislamiento entre espacios de memoria.
