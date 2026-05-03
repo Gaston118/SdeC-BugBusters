@@ -312,7 +312,7 @@ Finalmente, se obtuvo como resultado el mismo error visto durante en análisis p
 <img width="928" height="469" alt="imagen" src="https://github.com/user-attachments/assets/38720e16-71a2-4e47-a765-ff089da615ad" />
 
 Ahora, la pregunta es; **¿Qué significa este error y por qué ocurre?**
-Lo que nos dice este error es que el firmware está ejecutando `aplicacion.efi` correctamente pero en algún punto se ejecuta una parte de código que el procesador considera como código inválido, lo que lanza el error #UD o Invalid Opcode. Por lo tanto, se puede decir que el error debería estar en el Binario EFI o en una ruptura del ABI, es decir, puede deberse a un error de linkeo del EFI, lo que podría generar un stack corrupto.
+Lo que nos dice este error es que el firmware está ejecutando `aplicacion.efi` correctamente pero en algún punto se ejecuta una parte de código que genera un acceso inválido a una memoria protegida, lo que lanza el error #GP o General Protection Fault. Por lo tanto, se puede decir que el error debería estar en el Binario EFI o en una ruptura del ABI, es decir, puede deberse a un error de linkeo del EFI, lo que podría generar un stack corrupto.
 
 **¿Qué alternativas podemos usar para resolver este error?**
 - *Utilizar EDK2:* Este es el estándar oficial de UEFI, posee un build system robusto y un ABI mas controlado. Con esto evitamos los problemas de linking y a su vez generar un entry point correcto de manera automática.
