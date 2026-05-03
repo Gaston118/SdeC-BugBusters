@@ -270,3 +270,50 @@ En complemento a dos de 8 bits, cuando el bit más significativo es `1`, el núm
 ---
 
 ## PARTE 3 Ejecución en Hardware Físico (BareMetal)
+
+En este apartado, se analizará el resultado obtenido por medio de la ejecución del archivo .efi realizado en la Parte 2.
+Algo a tener en cuenta es que se dividirá en 2 el análisis.
+
+### Análisis de ejecución Bare Metal.
+Como indica la sección, se cargó el archivo `aplicacion.efi` a un pendrive con el fin de correrlo directamente sobre el procesador. Esto se realizó siguiendo los lineamientos planteados en el documento respectivo del trabajo. Como primera medida, se formateó la unidad en FAT32, con el fin de almacenar el archivo .efi correctamente.
+Para bootear sobre el pendrive, se seleccionó la unidad rooteada UEFI utilizando la tecla de comando F12, lo que abrió la consola `Shell`. A la hora de intentar ejecutar la aplicación no se pudo observar la respuesta esperada, es más, no se obtuvo respuesta alguna. Lo que nos lleva al segundo apartado.
+
+### Análisis de ejecución mediante QEMU+Shell.
+Dados los problemas anteriores, se optó por analizar el comportamiento mediante QEMU, para visualizar de manera mas detallada el comportamiento interno del procesador.
+Para poder ejecutar el código se utilizó una unidad de memoria virtual simulada, construida y configurada mediante los siguientes comandos:
+
+```bash
+  dd if=/dev/zero of=fat.img bs=1M count=64
+  mkfs.vfat fat.img
+  mkdir mnt
+  sudo mount -o loop fat.img mnt
+  sudo mkdir -p mnt/EFI/BOOT
+  sudo cp aplicacion.efi mnt/EFI/BOOT
+  sudo sync
+  sudo umount mnt
+```
+Este bloque de código se encarga de, crear la imágen `fat.img`, designarle un tipo de dato FAT32 y de crear la carpeta (dentro de la imágen) donde se alojará el archivo `aplicacion.efi`.
+
+<img width="937" height="54" alt="imagen" src="https://github.com/user-attachments/assets/fa9e1c0e-2c2b-4ceb-90bc-c5e32a16e24a" />
+
+Una vez hecho esto, se procedió a ejecutar QEMU con OVMF para poder visualizar la consola de Shell, utilizando el siguiente comando:
+
+```bash
+  qemu-system-x86_64   -drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd   -drive         if=pflash,format=raw,file=OVMF_VARS_4M.fd   -drive format=raw,file=fat.img   -serial stdio   -net none
+```
+Lo que abrió la consola de Shell y a su vez nos permitió ver todo el proceso desde la consola de linux.
+
+<img width="792" height="334" alt="imagen" src="https://github.com/user-attachments/assets/bd341b49-22a3-477b-ab22-f2e52b497540" />
+
+<img width="841" height="183" alt="imagen" src="https://github.com/user-attachments/assets/a1e9cac9-b5fd-49b8-a183-f7e67ae4690c" />
+
+Finalmente, se obtuvo como resultado el mismo error visto durante en análisis por medio del formato en Pendrive, pero en este caso se pudo ver una lectura del error obtenido.
+
+<img width="928" height="469" alt="imagen" src="https://github.com/user-attachments/assets/38720e16-71a2-4e47-a765-ff089da615ad" />
+
+Ahora, la pregunta es; **¿Qué significa este error y por qué ocurre?**
+Lo que nos dice este error es que el firmware está ejecutando `aplicacion.efi` correctamente pero en algún punto se ejecuta una parte de código que el procesador considera como código inválido, lo que lanza el error #UD o Invalid Opcode. Por lo tanto, se puede decir que el error debería estar en el Binario EFI o en una ruptura del ABI, es decir, puede deberse a un error de linkeo del EFI, lo que podría generar un stack corrupto.
+
+**¿Qué alternativas podemos usar para resolver este error?**
+- *Utilizar EDK2:* Este es el estándar oficial de UEFI, posee un build system robusto y un ABI mas controlado. Con esto evitamos los problemas de linking y a su vez generar un entry point correcto de manera automática.
+- *Bootloader propio:* Al estilo OSDev, nos permite usar UEFI solamente para cargar el binario, dándonos control completo del resto de parámetros.
